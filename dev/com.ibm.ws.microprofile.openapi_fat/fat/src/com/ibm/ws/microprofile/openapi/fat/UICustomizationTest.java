@@ -142,6 +142,10 @@ public class UICustomizationTest extends FATServletClient {
         validateDefaultOpenAPIUI();
     }
 
+    private boolean isValidDefaultOpenAPIUI() throws IOException, Exception {
+        return validateOpenAPIUI(CSS_CONTENT_DEFAULT, false, false);
+    }
+
     private void validateDefaultOpenAPIUI() throws IOException, Exception {
         validateOpenAPIUI(CSS_CONTENT_DEFAULT, false, true);
     }
