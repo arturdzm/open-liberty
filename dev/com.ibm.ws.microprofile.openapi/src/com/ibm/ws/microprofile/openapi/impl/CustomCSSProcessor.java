@@ -28,6 +28,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
+import org.eclipse.microprofile.config.spi.ConfigProviderResolver;
+import org.eclipse.microprofile.openapi.OASConfig;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceReference;
@@ -38,6 +40,7 @@ import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
 import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 
 import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
@@ -79,6 +82,7 @@ public final class CustomCSSProcessor implements FileMonitor {
     private final List<String> filesToMonitor = new ArrayList<String>();
     private final CustomCSSWABUpdater updater;
 
+    private final Object cssUpdaterLock = new Object();
     private final ConcurrentLinkedQueue<CSSUpdate> cssUpdates = new ConcurrentLinkedQueue<CSSUpdate>();
 
     public class CSSUpdate {
@@ -116,6 +120,9 @@ public final class CustomCSSProcessor implements FileMonitor {
 
     private synchronized void activateFileMonitor(ComponentContext cc) {
         final int pollingInterval = new ConfigProcessor(CustomCSSProcessor.class.getClassLoader()).getFilePollingInterval();
+        if (OpenAPIUtils.isEventEnabled(tc)) {
+            Tr.event(this, tc, OASConfig.EXTENSIONS_PREFIX + "liberty.file.polling.interval=" + pollingInterval);
+        }
         if (pollingInterval > 0) {
             final BundleContext bundleContext = cc.getBundleContext();
             final Dictionary<String, Object> props = new Hashtable<String, Object>();
@@ -187,8 +194,8 @@ public final class CustomCSSProcessor implements FileMonitor {
                     Tr.warning(tc, "CSS_NOT_PROCESSED", uri, se.getClass().getName(), se.getMessage());
                 }
             } else {
-                if (OpenAPIUtils.isDebugEnabled(tc)) {
-                    Tr.debug(this, tc, "Restore to default CSS");
+                if (OpenAPIUtils.isEventEnabled(tc)) {
+                    Tr.event(this, tc, "Restore to default CSS");
                 }
                 cssUpdates.add(new CSSUpdate());
                 cssProcessed = true;
@@ -200,8 +207,8 @@ public final class CustomCSSProcessor implements FileMonitor {
         }
 
         if (!cssProcessed) {
-            if (OpenAPIUtils.isDebugEnabled(tc)) {
-                Tr.debug(this, tc, "CSS was not processed - error occurred. So restore to default.");
+            if (OpenAPIUtils.isEventEnabled(tc)) {
+                Tr.event(this, tc, "CSS was not processed - error occurred. So restore to default.");
             }
             cssUpdates.add(new CSSUpdate());
         }
@@ -211,7 +218,7 @@ public final class CustomCSSProcessor implements FileMonitor {
 
     private void processCSSUpdates(ScheduledExecutorService executor) {
         if (cssUpdates.size() > 0) {
-            final CustomCSSProcessor cssUpdator = this;
+            final Object cssUpdator = cssUpdaterLock;
             // Create a Runnable to process updates.
             // The ExecutorService may run it in a new thread.
             Runnable bundleUpdater = new Runnable() {
@@ -287,6 +294,11 @@ public final class CustomCSSProcessor implements FileMonitor {
 
     protected void unsetLocationAdmin(WsLocationAdmin provider) {
         this.locationAdminProvider = null;
+    }
+
+    @Reference(service = ConfigProviderResolver.class, cardinality = ReferenceCardinality.MANDATORY)
+    protected void setConfigProvider(ConfigProviderResolver configResolver) {
+        //makes sure config provider resolver is started
     }
 
     //
