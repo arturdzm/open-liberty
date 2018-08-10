@@ -24,6 +24,8 @@ IBM-Web-Extension-Processing-Disabled: true
 
 Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"
 
+Private-Package: \
+	com.ibm.ws.microprofile.metrics.resources
 -dsannotations-inherit: true
 -dsannotations: \
 	com.ibm.ws.microprofile.metrics10.impl.SharedMetricRegistries10
